@@ -28,8 +28,16 @@ jobs:
       - name: Build app and instrumentation APKs
         working-directory: android
         run: gradle assembleDebug assembleDebugAndroidTest --stacktrace
-      - name: Record public signing certificate
-        run: keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d ' ' -f 1 > android/signing-used.sha256
+      - name: Verify APK signature and record its public certificate
+        run: |
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK"
+          APKSIGNER=$(find "$SDK/build-tools" -type f -name apksigner | sort -V | tail -n 1)
+          test -x "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs android/app/build/outputs/apk/debug/app-debug.apk > android/apk-signature-verification.txt
+          cat android/apk-signature-verification.txt
+          sed -n 's/^Signer #1 certificate SHA-256 digest: //p' android/apk-signature-verification.txt > android/signing-used.sha256
+          grep -Eq '^[0-9a-fA-F]{64}$' android/signing-used.sha256
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -55,6 +63,7 @@ jobs:
           cp android/app/build/outputs/apk/debug/app-debug.apk dist/CoverArtVideoMaker-v1.2.0.apk
           cp test-exports/verification.json dist/Export-Verification.json
           cp android/signing-used.sha256 dist/Signing-Certificate-SHA256.txt
+          cp android/apk-signature-verification.txt dist/APK-Signature-Verification.txt
           cp android/EXPORT_FIX.md dist/Export-Repair-Notes.md
           printf 'Cover Art Video Maker 1.2.0 (versionCode 3)\nCommit: %s\n' "$GITHUB_SHA" > dist/Build-Info.txt
           sha256sum dist/*.apk > dist/APK-SHA256.txt
@@ -70,6 +79,7 @@ jobs:
           name: Cover-Art-Video-Maker-Export-Tests
           path: |
             android/signing-used.sha256
+            android/apk-signature-verification.txt
             test-exports/
             test-logcat.txt
             instrumentation-results.txt
