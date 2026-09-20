@@ -6,7 +6,6 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: write
 concurrency:
   group: cover-art-android-${{ github.ref }}
   cancel-in-progress: true
@@ -16,10 +15,6 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - name: Remove obsolete development-key cache
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh cache delete cover-art-video-maker-debug-signing-v1 --repo "$GITHUB_REPOSITORY" || true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -46,17 +41,18 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -memory 4096
-          script: gradle -p android connectedDebugAndroidTest --stacktrace; RESULT=$?; adb logcat -d > test-logcat.txt; adb pull /sdcard/Android/data/com.haseltonmediagroup.coverartvideomaker/files/regression test-exports || true; exit $RESULT
+          script: bash android/tests/run_instrumentation.sh
       - name: Verify codecs, pitch, frame timestamps, full endings and lossless AAC copy
         run: |
-          command -v ffmpeg >/dev/null || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-          python3 android/tests/verify_exports.py test-exports
+          command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg)
+          python3 android/tests/verify_exports.py test-exports 2>&1 | tee verification-console.txt
       - name: Package verified APK
         run: |
           mkdir -p dist
           cp android/app/build/outputs/apk/debug/app-debug.apk dist/CoverArtVideoMaker-v1.2.0.apk
           cp test-exports/verification.json dist/Export-Verification.json
           cp android/signing-used.sha256 dist/Signing-Certificate-SHA256.txt
+          cp android/EXPORT_FIX.md dist/Export-Repair-Notes.md
           printf 'Cover Art Video Maker 1.2.0 (versionCode 3)\nCommit: %s\n' "$GITHUB_SHA" > dist/Build-Info.txt
           sha256sum dist/*.apk > dist/APK-SHA256.txt
       - uses: actions/upload-artifact@v4
@@ -70,9 +66,12 @@ jobs:
         with:
           name: Cover-Art-Video-Maker-Export-Tests
           path: |
-            android/app/build/reports/androidTests/
-            android/app/build/outputs/androidTest-results/
             android/signing-used.sha256
             test-exports/
             test-logcat.txt
+            instrumentation-results.txt
+            verification-console.txt
+            ui-launch.txt
+            ui-hierarchy.xml
+            ui-screenshot.png
           if-no-files-found: warn
