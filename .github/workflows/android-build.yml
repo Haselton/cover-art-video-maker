@@ -36,7 +36,7 @@ jobs:
           test -x "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs android/app/build/outputs/apk/debug/app-debug.apk > android/apk-signature-verification.txt
           cat android/apk-signature-verification.txt
-          sed -n 's/^Signer #1 certificate SHA-256 digest: //p' android/apk-signature-verification.txt > android/signing-used.sha256
+          sed -n 's/^.*certificate SHA-256 digest: //p' android/apk-signature-verification.txt > android/signing-used.sha256
           grep -Eq '^[0-9a-fA-F]{64}$' android/signing-used.sha256
       - name: Enable emulator acceleration
         run: |
