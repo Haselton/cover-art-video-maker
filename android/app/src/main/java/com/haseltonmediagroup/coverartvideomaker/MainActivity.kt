@@ -8,10 +8,14 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
@@ -56,26 +60,43 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(b)
         window.statusBarColor=bg; window.navigationBarColor=bg
         val scroll=ScrollView(this).apply { setBackgroundColor(bg) }
-        val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(34,46,34,42) }
+        ViewCompat.setOnApplyWindowInsetsListener(scroll) { view,insets ->
+            val bars=insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
+            view.setPadding(bars.left,bars.top,bars.right,bars.bottom)
+            insets
+        }
+        val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(34,24,34,42) }
         scroll.addView(root); root.addView(header())
         root.addView(text("MUSIC IN • VIDEO OUT",13f,cyan,true).apply { gravity=Gravity.CENTER; setPadding(0,0,0,22) })
         root.addView(card())
         root.addView(text("OUTPUT FORMAT",12f,muted,true).apply { setPadding(2,22,0,8) })
-        preset=Spinner(this).apply {
-            adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
-                arrayOf("YouTube  •  1920 × 1080  •  16:9","Square  •  1080 × 1080  •  1:1","TikTok / Shorts / Reels  •  1080 × 1920  •  9:16"))
-            setBackgroundColor(panel)
-        }
-        root.addView(preset,LinearLayout.LayoutParams(-1,58))
+        val labels=arrayOf("YouTube  •  1920 × 1080  •  16:9","Square  •  1080 × 1080  •  1:1","TikTok / Shorts / Reels  •  1080 × 1920  •  9:16")
+        val formatAdapter=object : ArrayAdapter<String>(this,android.R.layout.simple_spinner_item,labels) {
+            override fun getView(position:Int,convertView:View?,parent:ViewGroup):View =
+                (super.getView(position,convertView,parent) as TextView).apply {
+                    setTextColor(Color.WHITE); textSize=14f; gravity=Gravity.CENTER_VERTICAL
+                    setPadding(dp(12),0,dp(12),0); setSingleLine(false); maxLines=2
+                }
+            override fun getDropDownView(position:Int,convertView:View?,parent:ViewGroup):View =
+                (super.getDropDownView(position,convertView,parent) as TextView).apply {
+                    setTextColor(Color.WHITE); setBackgroundColor(panel); textSize=14f
+                    gravity=Gravity.CENTER_VERTICAL; minHeight=dp(56)
+                    setPadding(dp(12),dp(8),dp(12),dp(8)); setSingleLine(false); maxLines=2
+                }
+        }.apply { setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
+        preset=Spinner(this).apply { adapter=formatAdapter; setBackgroundColor(panel) }
+        root.addView(preset,LinearLayout.LayoutParams(-1,dp(48)))
         root.addView(text("MP4 • H.264 • 25 FPS\nAAC-LC • 44.1 kHz stereo • full-length audio",11f,muted,false).apply {
             gravity=Gravity.CENTER; setPadding(0,12,0,0)
         })
         createButton=Button(this).apply {
             text="CREATE VIDEO  ▶"; textSize=17f; setTextColor(Color.BLACK)
             isAllCaps=false; isEnabled=false; background=round(cyan,18f)
+            // Theme button padding must not consume a fixed pixel-height control.
+            setPadding(dp(12),0,dp(12),0); minHeight=0; minimumHeight=0; gravity=Gravity.CENTER
             setOnClickListener { startRender() }
         }
-        root.addView(createButton,LinearLayout.LayoutParams(-1,64).apply { topMargin=22 })
+        root.addView(createButton,LinearLayout.LayoutParams(-1,dp(56)).apply { topMargin=22 })
         progressBar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
             max=100; progress=0; progressTintList=android.content.res.ColorStateList.valueOf(cyan)
         }
@@ -88,11 +109,13 @@ class MainActivity : AppCompatActivity() {
             gravity=Gravity.CENTER; setPadding(0,20,0,0)
         })
         setContentView(scroll)
+        ViewCompat.requestApplyInsets(scroll)
     }
+    private fun dp(value:Int)=(value*resources.displayMetrics.density+.5f).toInt()
     private fun header(): LinearLayout {
         val box=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(0,0,0,8) }
-        val mark=TextView(this).apply { text="◉"; textSize=44f; setTextColor(cyan); gravity=Gravity.CENTER }
-        box.addView(mark,LinearLayout.LayoutParams(68,68))
+        val mark=TextView(this).apply { text="◉"; textSize=44f; setTextColor(cyan); gravity=Gravity.CENTER; includeFontPadding=false }
+        box.addView(mark,LinearLayout.LayoutParams(dp(48),dp(68)))
         val words=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         words.addView(text("COVER ART",28f,Color.WHITE,true)); words.addView(text("VIDEO MAKER",28f,cyan,true))
         box.addView(words); return box
@@ -105,12 +128,12 @@ class MainActivity : AppCompatActivity() {
             gravity=Gravity.CENTER; background=round(Color.rgb(20,34,43),14f)
             setOnClickListener { if (!rendering) artPicker.launch("image/*") }
         }
-        c.addView(artState,LinearLayout.LayoutParams(-1,58).apply { topMargin=14 })
+        c.addView(artState,LinearLayout.LayoutParams(-1,dp(48)).apply { topMargin=14 })
         audioState=text("♫  SELECT AUDIO",14f,Color.WHITE,true).apply {
             gravity=Gravity.CENTER; background=round(Color.rgb(20,34,43),14f)
             setOnClickListener { if (!rendering) audioPicker.launch("audio/*") }
         }
-        c.addView(audioState,LinearLayout.LayoutParams(-1,58).apply { topMargin=10 }); return c
+        c.addView(audioState,LinearLayout.LayoutParams(-1,dp(48)).apply { topMargin=10 }); return c
     }
     private fun text(v:String,s:Float,color:Int,bold:Boolean)=TextView(this).apply {
         text=v; textSize=s; setTextColor(color); if(bold)setTypeface(typeface,Typeface.BOLD); letterSpacing=.05f
@@ -120,7 +143,7 @@ class MainActivity : AppCompatActivity() {
     }
     private fun ready() {
         createButton.isEnabled=!rendering && artUri!=null && audioUri!=null
-        createButton.alpha=if(createButton.isEnabled)1f else .45f
+        createButton.alpha=if(createButton.isEnabled)1f else .65f
     }
     private fun progress(message:String,percent:Int) {
         runOnUiThread { if (!isDestroyed) { status.text=message; progressBar.progress=percent } }
