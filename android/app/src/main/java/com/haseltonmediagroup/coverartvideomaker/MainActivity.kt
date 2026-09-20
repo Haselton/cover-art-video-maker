@@ -3,32 +3,191 @@ package com.haseltonmediagroup.coverartvideomaker
 import android.content.ContentValues
 import android.graphics.*
 import android.graphics.drawable.GradientDrawable
-import android.media.*
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.Gravity
-import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.*
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import java.io.File
 
-class MainActivity:AppCompatActivity(){
- private val cyan=Color.rgb(0,229,255);private val bg=Color.rgb(5,9,13);private val panel=Color.rgb(14,23,30);private val muted=Color.rgb(151,171,184)
- private var artUri:Uri?=null;private var audioUri:Uri?=null;private lateinit var status:TextView;private lateinit var createButton:Button;private lateinit var preset:Spinner;private lateinit var artPreview:ImageView;private lateinit var artState:TextView;private lateinit var audioState:TextView;private lateinit var progressBar:ProgressBar
- private val artPicker=registerForActivityResult(ActivityResultContracts.GetContent()){if(it!=null){artUri=it;artPreview.setImageURI(it);artPreview.scaleType=ImageView.ScaleType.CENTER_CROP;artState.text="✓ ARTWORK READY";artState.setTextColor(cyan);ready()}}
- private val audioPicker=registerForActivityResult(ActivityResultContracts.GetContent()){if(it!=null){audioUri=it;val m=MediaMetadataRetriever();try{m.setDataSource(this,it);val ms=m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?:0;audioState.text="✓ AUDIO READY  •  ${ms/60000}:${((ms/1000)%60).toString().padStart(2,'0')}"}finally{m.release()};audioState.setTextColor(cyan);ready()}}
- override fun onCreate(b:Bundle?){super.onCreate(b);window.statusBarColor=bg;window.navigationBarColor=bg;val scroll=ScrollView(this).apply{setBackgroundColor(bg)};val root=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;setPadding(34,46,34,42)};scroll.addView(root);root.addView(header());root.addView(text("MUSIC IN • VIDEO OUT",13f,cyan,true).apply{gravity=Gravity.CENTER;setPadding(0,0,0,22)});root.addView(card());root.addView(text("OUTPUT FORMAT",12f,muted,true).apply{setPadding(2,22,0,8)});preset=Spinner(this).apply{adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,arrayOf("YouTube  •  1920 × 1080  •  16:9","Square  •  1080 × 1080  •  1:1","Shorts / Reels  •  1080 × 1920  •  9:16"));setBackgroundColor(panel)};root.addView(preset,LinearLayout.LayoutParams(-1,58));createButton=Button(this).apply{text="CREATE VIDEO  ▶";textSize=17f;setTextColor(Color.BLACK);isAllCaps=false;isEnabled=false;background=round(cyan,18f);setOnClickListener{startRender()}};root.addView(createButton,LinearLayout.LayoutParams(-1,64).apply{topMargin=22});progressBar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply{max=100;progress=0;progressTintList=android.content.res.ColorStateList.valueOf(cyan)};root.addView(progressBar,LinearLayout.LayoutParams(-1,7).apply{topMargin=18});status=text("Select your artwork and audio to begin.",13f,muted,false).apply{gravity=Gravity.CENTER;setPadding(0,12,0,8)};root.addView(status);root.addView(text("PRIVATE BY DESIGN  •  YOUR MEDIA STAYS ON YOUR DEVICE",10f,Color.rgb(88,117,130),true).apply{gravity=Gravity.CENTER;setPadding(0,20,0,0)});setContentView(scroll)}
- private fun header():LinearLayout{val box=LinearLayout(this).apply{orientation=LinearLayout.HORIZONTAL;gravity=Gravity.CENTER_VERTICAL;setPadding(0,0,0,8)};val mark=TextView(this).apply{text="◉";textSize=44f;setTextColor(cyan);gravity=Gravity.CENTER};box.addView(mark,LinearLayout.LayoutParams(68,68));val words=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL};words.addView(text("COVER ART",28f,Color.WHITE,true));words.addView(text("VIDEO MAKER",28f,cyan,true));box.addView(words);return box}
- private fun card():LinearLayout{val c=LinearLayout(this).apply{orientation=LinearLayout.VERTICAL;padding(18);background=round(panel,22f)};artPreview=ImageView(this).apply{setBackgroundColor(Color.rgb(9,15,20));setImageDrawable(null)};c.addView(artPreview,LinearLayout.LayoutParams(-1,420));artState=text("＋  SELECT COVER ART",14f,Color.WHITE,true).apply{gravity=Gravity.CENTER;background=round(Color.rgb(20,34,43),14f);setOnClickListener{artPicker.launch("image/*")}};c.addView(artState,LinearLayout.LayoutParams(-1,58).apply{topMargin=14});audioState=text("♫  SELECT AUDIO",14f,Color.WHITE,true).apply{gravity=Gravity.CENTER;background=round(Color.rgb(20,34,43),14f);setOnClickListener{audioPicker.launch("audio/*")}};c.addView(audioState,LinearLayout.LayoutParams(-1,58).apply{topMargin=10});return c}
- private fun LinearLayout.padding(v:Int){setPadding(v,v,v,v)}
- private fun text(v:String,s:Float,color:Int,bold:Boolean)=TextView(this).apply{text=v;textSize=s;setTextColor(color);if(bold)setTypeface(typeface,Typeface.BOLD);letterSpacing=.05f}
- private fun round(color:Int,r:Float)=GradientDrawable().apply{setColor(color);cornerRadius=r;setStroke(if(color==panel)1 else 0,Color.rgb(25,56,68))}
- private fun ready(){createButton.isEnabled=artUri!=null&&audioUri!=null;createButton.alpha=if(createButton.isEnabled)1f else .45f}
- private fun progress(v:String,p:Int){runOnUiThread{status.text=v;progressBar.progress=p}}
- private fun startRender(){createButton.isEnabled=false;progress("Preparing media…",5);Thread{try{render()}catch(e:Exception){runOnUiThread{status.text="Render failed: ${e.message}";createButton.isEnabled=true}}}.start()}
- private fun draw(surface:android.view.Surface,b:Bitmap,w:Int,h:Int,p:Paint){val c=surface.lockCanvas(null);try{c.drawColor(Color.BLACK);val s=minOf(w.toFloat()/b.width,h.toFloat()/b.height);val dw=b.width*s;val dh=b.height*s;c.drawBitmap(b,null,RectF((w-dw)/2,(h-dh)/2,(w+dw)/2,(h+dh)/2),p)}finally{surface.unlockCanvasAndPost(c)}}
- private fun render(){val art=artUri?:error("No art");val audio=audioUri?:error("No audio");val(w,h)=arrayOf(1920 to 1080,1080 to 1080,1080 to 1920)[preset.selectedItemPosition];val mmr=MediaMetadataRetriever();mmr.setDataSource(this,audio);val durationUs=(mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?:error("No duration"))*1000L;mmr.release();val bitmap=contentResolver.openInputStream(art).use{requireNotNull(BitmapFactory.decodeStream(it))};val name="CoverArtVideo_${System.currentTimeMillis()}.mp4";val cv=ContentValues().apply{put(MediaStore.Video.Media.DISPLAY_NAME,name);put(MediaStore.Video.Media.MIME_TYPE,"video/mp4");put(MediaStore.Video.Media.RELATIVE_PATH,"Movies/Cover Art Video Maker")};val out=contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,cv)?:error("Output failed");val ofd=contentResolver.openFileDescriptor(out,"w")?:error("Output open failed");val mux=MediaMuxer(ofd.fileDescriptor,MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);val vf=MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC,w,h).apply{setInteger(MediaFormat.KEY_COLOR_FORMAT,MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);setInteger(MediaFormat.KEY_BIT_RATE,4_000_000);setInteger(MediaFormat.KEY_FRAME_RATE,1);setInteger(MediaFormat.KEY_I_FRAME_INTERVAL,5)};val ve=MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);ve.configure(vf,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);val surface=ve.createInputSurface();ve.start();val vi=MediaCodec.BufferInfo();var vt=-1;val af=MediaFormat.createAudioFormat(MediaFormat.MIMETYPE_AUDIO_AAC,44100,2).apply{setInteger(MediaFormat.KEY_AAC_PROFILE,MediaCodecInfo.CodecProfileLevel.AACObjectLC);setInteger(MediaFormat.KEY_BIT_RATE,320000)};val ae=MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC);ae.configure(af,null,null,MediaCodec.CONFIGURE_FLAG_ENCODE);ae.start();val ai=MediaCodec.BufferInfo();var at=-1;val paint=Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG);draw(surface,bitmap,w,h,paint);val seed=ae.dequeueInputBuffer(10000);if(seed>=0)ae.queueInputBuffer(seed,0,0,0,0);repeat(200){if(vt<0){val x=ve.dequeueOutputBuffer(vi,10000);if(x==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED)vt=mux.addTrack(ve.outputFormat)else if(x>=0)ve.releaseOutputBuffer(x,false)};if(at<0){val x=ae.dequeueOutputBuffer(ai,10000);if(x==MediaCodec.INFO_OUTPUT_FORMAT_CHANGED)at=mux.addTrack(ae.outputFormat)else if(x>=0)ae.releaseOutputBuffer(x,false)}};require(vt>=0&&at>=0);mux.start();progress("Creating cover video…",30);val seconds=((durationUs+999999)/1000000).coerceAtLeast(1);for(sec in 0 until seconds){draw(surface,bitmap,w,h,paint);drainVideo(ve,mux,vt,vi,false,sec*1000000);if(sec%10L==0L)progress("Creating cover video…",30+((sec*20)/seconds).toInt())};ve.signalEndOfInputStream();drainVideo(ve,mux,vt,vi,true,(seconds-1)*1000000);progress("Preserving high-quality audio…",55);transcode(audio,ae,mux,at,durationUs);progress("Finalizing MP4…",95);ve.stop();ve.release();surface.release();ae.stop();ae.release();mux.stop();mux.release();ofd.close();bitmap.recycle();runOnUiThread{progressBar.progress=100;status.text="✓ COMPLETE — saved to Movies/Cover Art Video Maker";status.setTextColor(cyan);createButton.isEnabled=true;Toast.makeText(this,"Video created",Toast.LENGTH_LONG).show()}}
- private fun drainVideo(enc:MediaCodec,mux:MediaMuxer,track:Int,info:MediaCodec.BufferInfo,end:Boolean,expectedPts:Long){var idle=0;while(true){val x=enc.dequeueOutputBuffer(info,if(end)10000 else 0);if(x==MediaCodec.INFO_TRY_AGAIN_LATER){if(!end)return;if(++idle>100)error("Encoder timeout")}else if(x>=0){idle=0;val b=enc.getOutputBuffer(x);if(b!=null&&info.size>0){b.position(info.offset);b.limit(info.offset+info.size);info.presentationTimeUs=expectedPts;mux.writeSampleData(track,b,info)};val eos=info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM!=0;enc.releaseOutputBuffer(x,false);if(eos)return}}}
- private fun transcode(uri:Uri,enc:MediaCodec,mux:MediaMuxer,track:Int,durationUs:Long){val ex=MediaExtractor();val fd=contentResolver.openFileDescriptor(uri,"r")?:error("Audio open failed");ex.setDataSource(fd.fileDescriptor);var idx=-1;for(i in 0 until ex.trackCount)if(ex.getTrackFormat(i).getString(MediaFormat.KEY_MIME)?.startsWith("audio/")==true){idx=i;break};require(idx>=0);ex.selectTrack(idx);val fmt=ex.getTrackFormat(idx);val mime=fmt.getString(MediaFormat.KEY_MIME)?:error("Audio format missing");val dec=MediaCodec.createDecoderByType(mime);dec.configure(fmt,null,null,0);dec.start();val di=MediaCodec.BufferInfo();val ei=MediaCodec.BufferInfo();var extractorDone=false;var decoderDone=false;var eosQueued=false;var encoderDone=false;var pending:ByteArray?=null;var pendingPos=0;var pendingPts=0L;var lastPts=0L;var lastPct=-1;var idle=0;while(!encoderDone){var moved=false;while(true){val ox=enc.dequeueOutputBuffer(ei,0);if(ox>=0){val ob=enc.getOutputBuffer(ox);if(ob!=null&&ei.size>0){ob.position(ei.offset);ob.limit(ei.offset+ei.size);if(ei.presentationTimeUs<=durationUs)mux.writeSampleData(track,ob,ei)};encoderDone=ei.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM!=0;enc.releaseOutputBuffer(ox,false);moved=true}else break};if(pending!=null){val ix=enc.dequeueInputBuffer(0);if(ix>=0){val ib=enc.getInputBuffer(ix)!!;ib.clear();val data=pending!!;val n=minOf(ib.remaining(),data.size-pendingPos);ib.put(data,pendingPos,n);val pts=maxOf(lastPts,pendingPts);enc.queueInputBuffer(ix,0,n,pts,0);lastPts=pts+1;pendingPos+=n;if(pendingPos>=data.size){pending=null;pendingPos=0};moved=true}};if(pending==null&&!decoderDone){val ox=dec.dequeueOutputBuffer(di,0);if(ox>=0){if(di.size>0){val db=dec.getOutputBuffer(ox)!!;db.position(di.offset);db.limit(di.offset+di.size);pending=ByteArray(di.size);db.get(pending!!);pendingPts=di.presentationTimeUs.coerceIn(0,durationUs);val pct=55+((pendingPts*35)/durationUs.coerceAtLeast(1)).toInt().coerceIn(0,35);if(pct!=lastPct){lastPct=pct;progress("Preserving high-quality audio…",pct)}};decoderDone=di.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM!=0;dec.releaseOutputBuffer(ox,false);moved=true}};if(!extractorDone){val ix=dec.dequeueInputBuffer(0);if(ix>=0){val ib=dec.getInputBuffer(ix)!!;val n=ex.readSampleData(ib,0);if(n<0){dec.queueInputBuffer(ix,0,0,0,MediaCodec.BUFFER_FLAG_END_OF_STREAM);extractorDone=true}else{dec.queueInputBuffer(ix,0,n,ex.sampleTime.coerceAtLeast(0),0);ex.advance()};moved=true}};if(decoderDone&&pending==null&&!eosQueued){val ix=enc.dequeueInputBuffer(0);if(ix>=0){enc.queueInputBuffer(ix,0,0,durationUs,MediaCodec.BUFFER_FLAG_END_OF_STREAM);eosQueued=true;moved=true}};if(moved)idle=0 else{Thread.sleep(2);if(++idle>15000)error("Audio pipeline timed out")}};dec.stop();dec.release();ex.release();fd.close()}
+class MainActivity : AppCompatActivity() {
+    private val cyan=Color.rgb(0,229,255)
+    private val bg=Color.rgb(5,9,13)
+    private val panel=Color.rgb(14,23,30)
+    private val muted=Color.rgb(151,171,184)
+    private var artUri: Uri? = null
+    private var audioUri: Uri? = null
+    private var rendering = false
+    @Volatile private var activeExporter: CoverVideoExporter? = null
+    private lateinit var status: TextView
+    private lateinit var createButton: Button
+    private lateinit var preset: Spinner
+    private lateinit var artPreview: ImageView
+    private lateinit var artState: TextView
+    private lateinit var audioState: TextView
+    private lateinit var progressBar: ProgressBar
+
+    private val artPicker=registerForActivityResult(ActivityResultContracts.GetContent()) {
+        if (it != null) {
+            artUri=it; artPreview.setImageURI(it)
+            artPreview.scaleType=ImageView.ScaleType.CENTER_CROP
+            artState.text="✓ ARTWORK READY"; artState.setTextColor(cyan); ready()
+        }
+    }
+    private val audioPicker=registerForActivityResult(ActivityResultContracts.GetContent()) {
+        if (it != null) {
+            audioUri=it
+            val m=MediaMetadataRetriever()
+            try {
+                m.setDataSource(this,it)
+                val ms=m.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0
+                audioState.text="✓ AUDIO READY  •  ${ms/60000}:${((ms/1000)%60).toString().padStart(2,'0')}"
+            } catch (_: Exception) {
+                audioState.text="✓ AUDIO SELECTED"
+            } finally { m.release() }
+            audioState.setTextColor(cyan); ready()
+        }
+    }
+    override fun onCreate(b: Bundle?) {
+        super.onCreate(b)
+        window.statusBarColor=bg; window.navigationBarColor=bg
+        val scroll=ScrollView(this).apply { setBackgroundColor(bg) }
+        val root=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(34,46,34,42) }
+        scroll.addView(root); root.addView(header())
+        root.addView(text("MUSIC IN • VIDEO OUT",13f,cyan,true).apply { gravity=Gravity.CENTER; setPadding(0,0,0,22) })
+        root.addView(card())
+        root.addView(text("OUTPUT FORMAT",12f,muted,true).apply { setPadding(2,22,0,8) })
+        preset=Spinner(this).apply {
+            adapter=ArrayAdapter(this@MainActivity,android.R.layout.simple_spinner_dropdown_item,
+                arrayOf("YouTube  •  1920 × 1080  •  16:9","Square  •  1080 × 1080  •  1:1","TikTok / Shorts / Reels  •  1080 × 1920  •  9:16"))
+            setBackgroundColor(panel)
+        }
+        root.addView(preset,LinearLayout.LayoutParams(-1,58))
+        root.addView(text("MP4 • H.264 • 25 FPS\nAAC-LC • 44.1 kHz stereo • full-length audio",11f,muted,false).apply {
+            gravity=Gravity.CENTER; setPadding(0,12,0,0)
+        })
+        createButton=Button(this).apply {
+            text="CREATE VIDEO  ▶"; textSize=17f; setTextColor(Color.BLACK)
+            isAllCaps=false; isEnabled=false; background=round(cyan,18f)
+            setOnClickListener { startRender() }
+        }
+        root.addView(createButton,LinearLayout.LayoutParams(-1,64).apply { topMargin=22 })
+        progressBar=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
+            max=100; progress=0; progressTintList=android.content.res.ColorStateList.valueOf(cyan)
+        }
+        root.addView(progressBar,LinearLayout.LayoutParams(-1,7).apply { topMargin=18 })
+        status=text("Select your artwork and audio to begin.",13f,muted,false).apply {
+            gravity=Gravity.CENTER; setPadding(0,12,0,8)
+        }
+        root.addView(status)
+        root.addView(text("PRIVATE BY DESIGN  •  YOUR MEDIA STAYS ON YOUR DEVICE",10f,Color.rgb(88,117,130),true).apply {
+            gravity=Gravity.CENTER; setPadding(0,20,0,0)
+        })
+        setContentView(scroll)
+    }
+    private fun header(): LinearLayout {
+        val box=LinearLayout(this).apply { orientation=LinearLayout.HORIZONTAL; gravity=Gravity.CENTER_VERTICAL; setPadding(0,0,0,8) }
+        val mark=TextView(this).apply { text="◉"; textSize=44f; setTextColor(cyan); gravity=Gravity.CENTER }
+        box.addView(mark,LinearLayout.LayoutParams(68,68))
+        val words=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        words.addView(text("COVER ART",28f,Color.WHITE,true)); words.addView(text("VIDEO MAKER",28f,cyan,true))
+        box.addView(words); return box
+    }
+    private fun card(): LinearLayout {
+        val c=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(18,18,18,18); background=round(panel,22f) }
+        artPreview=ImageView(this).apply { setBackgroundColor(Color.rgb(9,15,20)) }
+        c.addView(artPreview,LinearLayout.LayoutParams(-1,420))
+        artState=text("＋  SELECT COVER ART",14f,Color.WHITE,true).apply {
+            gravity=Gravity.CENTER; background=round(Color.rgb(20,34,43),14f)
+            setOnClickListener { if (!rendering) artPicker.launch("image/*") }
+        }
+        c.addView(artState,LinearLayout.LayoutParams(-1,58).apply { topMargin=14 })
+        audioState=text("♫  SELECT AUDIO",14f,Color.WHITE,true).apply {
+            gravity=Gravity.CENTER; background=round(Color.rgb(20,34,43),14f)
+            setOnClickListener { if (!rendering) audioPicker.launch("audio/*") }
+        }
+        c.addView(audioState,LinearLayout.LayoutParams(-1,58).apply { topMargin=10 }); return c
+    }
+    private fun text(v:String,s:Float,color:Int,bold:Boolean)=TextView(this).apply {
+        text=v; textSize=s; setTextColor(color); if(bold)setTypeface(typeface,Typeface.BOLD); letterSpacing=.05f
+    }
+    private fun round(color:Int,r:Float)=GradientDrawable().apply {
+        setColor(color); cornerRadius=r; setStroke(if(color==panel)1 else 0,Color.rgb(25,56,68))
+    }
+    private fun ready() {
+        createButton.isEnabled=!rendering && artUri!=null && audioUri!=null
+        createButton.alpha=if(createButton.isEnabled)1f else .45f
+    }
+    private fun progress(message:String,percent:Int) {
+        runOnUiThread { if (!isDestroyed) { status.text=message; progressBar.progress=percent } }
+    }
+    private fun startRender() {
+        if (rendering) return
+        val art=artUri ?: return
+        val audio=audioUri ?: return
+        // Capture all UI state before entering the worker thread.
+        val (width,height)=arrayOf(1920 to 1080,1080 to 1080,1080 to 1920)[preset.selectedItemPosition]
+        rendering=true; ready(); preset.isEnabled=false
+        status.setTextColor(muted); progress("Preparing compatible MP4…",0)
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        val exporter=CoverVideoExporter(applicationContext)
+        activeExporter=exporter
+        Thread {
+            val file=File(cacheDir,"CoverArtVideo_${java.util.UUID.randomUUID()}.mp4")
+            try {
+                exporter.export(art,audio,width,height,file) { p ->
+                    progress("Creating 25 fps video with full-length audio… ${(p * 94) / 100}%",(p * 94) / 100)
+                }
+                if (isDestroyed) return@Thread
+                progress("Checks passed — saving video…",96)
+                saveToGallery(file)
+                runOnUiThread {
+                    if (!isDestroyed) {
+                        progressBar.progress=100
+                        status.text="✓ COMPLETE — saved to Movies/Cover Art Video Maker"
+                        status.setTextColor(cyan)
+                        Toast.makeText(this,"Video created",Toast.LENGTH_LONG).show()
+                    }
+                }
+            } catch (e: Exception) {
+                progress("Render failed: ${e.message}",0)
+            } finally {
+                file.delete(); activeExporter=null
+                runOnUiThread {
+                    if (!isDestroyed) {
+                        rendering=false; preset.isEnabled=true; ready()
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                }
+            }
+        }.start()
+    }
+    private fun saveToGallery(file: File) {
+        val values=ContentValues().apply {
+            put(MediaStore.Video.Media.DISPLAY_NAME,"CoverArtVideo_${System.currentTimeMillis()}.mp4")
+            put(MediaStore.Video.Media.MIME_TYPE,"video/mp4")
+            put(MediaStore.Video.Media.RELATIVE_PATH,"Movies/Cover Art Video Maker")
+            put(MediaStore.Video.Media.IS_PENDING,1)
+        }
+        val uri=contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI,values)
+            ?: error("Cannot create Gallery entry")
+        try {
+            val destination=contentResolver.openOutputStream(uri,"w") ?: error("Cannot open Gallery output")
+            destination.use { out -> file.inputStream().use { it.copyTo(out) } }
+            check(contentResolver.update(uri,ContentValues().apply {
+                put(MediaStore.Video.Media.IS_PENDING,0)
+            },null,null) == 1) { "Cannot finalize Gallery entry" }
+        } catch (e: Exception) {
+            contentResolver.delete(uri,null,null)
+            throw e
+        }
+    }
+    override fun onDestroy() {
+        activeExporter?.cancel()
+        super.onDestroy()
+    }
 }
