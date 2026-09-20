@@ -6,6 +6,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: write
 concurrency:
   group: cover-art-android-${{ github.ref }}
   cancel-in-progress: true
@@ -15,6 +16,10 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+      - name: Remove obsolete development-key cache
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh cache delete cover-art-video-maker-debug-signing-v1 --repo "$GITHUB_REPOSITORY" || true
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -22,37 +27,11 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Restore development signing identity
-        id: signing-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: cover-art-video-maker-debug-signing-v1
-      - name: Initialize or verify development certificate
-        shell: bash
-        run: |
-          mkdir -p "$HOME/.android"
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            if [ -f android/signing-certificate.sha256 ]; then
-              echo 'Signing key unavailable. Restore the original key; do not generate a replacement.'
-              exit 1
-            fi
-            keytool -genkeypair -keystore "$HOME/.android/debug.keystore" -storetype JKS -storepass android -keypass android -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=Android Debug,O=Android,C=US'
-          fi
-          keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d ' ' -f 1 > android/signing-used.sha256
-          cat android/signing-used.sha256
-          if [ -f android/signing-certificate.sha256 ]; then
-            diff -w android/signing-certificate.sha256 android/signing-used.sha256
-          fi
-      - name: Retain development signing key
-        if: steps.signing-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/.android/debug.keystore
-          key: cover-art-video-maker-debug-signing-v1
       - name: Build app and instrumentation APKs
         working-directory: android
         run: gradle assembleDebug assembleDebugAndroidTest --stacktrace
+      - name: Record public signing certificate
+        run: keytool -exportcert -alias androiddebugkey -keystore "$HOME/.android/debug.keystore" -storepass android | sha256sum | cut -d ' ' -f 1 > android/signing-used.sha256
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
